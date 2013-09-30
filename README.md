@@ -1,6 +1,8 @@
 flask-sandbox
 =============
 
+[![Build Status](https://travis-ci.org/kageurufu/flask-sandbox.png?branch=master)](https://travis-ci.org/kageurufu/flask-sandbox)
+
 A Flask plugin to restrict blueprints to specific users, this depends on flask-login's current_user, so that is required
 
 Goals of this extension are simple code, extendable code, and readability. So far, its only 31 lines of code
