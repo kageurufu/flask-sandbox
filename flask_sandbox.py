@@ -1,44 +1,61 @@
-from flask import (_request_ctx_stack, abort, current_app, flash, redirect, url_for, session, request)
-from flask.signals import Namespace
+from functools import wraps
+
+__version_info__ = ('0', '1', '0')
+__version__ = '.'.join(__version_info__)
+__author__ = 'Franklyn Tackitt'
+__license__ = 'MIT/X11'
+__copyright__ = '(c) 2013 by Franklyn Tackitt'
+__all__ = ['Sandbox']
+
 
 class Sandbox(object):
-	"""
-	This object restricts users to a sandboxed area of the site, based on restrictions determined by their User object
-	"""
-	user_type_attr = "type"
-	blueprints = {}
-	redirect = None
-	_app = None
 
-	def __init__(self, app=None, user_type_attr = "type"):
-		if app is not None:
-			self.init_app(app, user_type_attr)
+    """
+    This object restricts users to a sandboxed area of the site,
+    based on restrictions determined by their User object
+    """
+    _app = None
 
-	def setup_app(self, app=None, user_type_attr = "type"):
-		warnings.warn('Warning setup_app is deprecated. Please use init_app')
-		self.init_app(app, user_type_attr)
+    def __init__(self, app=None):
+        """Initializes the sandbox against the app"""
+        from flask import abort
+        from flask.ext.login import current_user
+        self.abort = abort
+        self.current_user = current_user
+        if app is not None:
+            self.init_app(app)
 
-	def init_app(self, app=None, user_type_attr = "type"):
-		app.sandbox = self
-		app.before_request(self.sandbox)
-		self.user_type_attr = user_type_attr
-		self._app = app
+    def __call__(self, filter, result=None, *args, **kwargs):
+        """A decorator for a single route, to restrict to a filter"""
+        def decorator(fn):
+            @wraps(fn)
+            def wrapper(*args, **kwargs):
+                if not self.current_user.is_authenticated() \
+                        or not filter(self.current_user):
+                    return result or self.abort(403)
+                return fn(*args, **kwargs)
+            return wrapper
+        return decorator
 
-	def register_blueprint(self, blueprint, user_type, url_prefix = None, redirect = None):
-		if not url_prefix:
-			url_prefix = "/" + user_type
-		if not redirect:
-			redirect = self.redirect
-		self._app.register_blueprint(blueprint, url_prefix = url_prefix)
-		self.blueprints[blueprint.name] = {"type": user_type, "redirect": redirect}
+    def setup_app(self, app=None):
+        """deprecated setup_app"""
+        import warnings
+        warnings.warn('Warning setup_app is deprecated. Please use init_app')
+        self.init_app(app)
 
-	def sandbox(self):
-		if _request_ctx_stack.top.request.blueprint not in self.blueprints:
-			return
-		bpn = _request_ctx_stack.top.request.blueprint
-		bpd = self.blueprints[bpn]
-		if not _request_ctx_stack.top.user.is_authenticated():
-			return redirect(url_for(bpd['redirect']))
-		if _request_ctx_stack.top.user.get(self.user_type_attr).lower() != bpd['type']:
-			return redirect(url_for(bpd['redirect']))
-		return
+    def init_app(self, app=None):
+        """Init the sandbox against the app"""
+        app.sandbox = self
+        self._app = app
+
+    def register_blueprint(self, blueprint, filter=None, result=None,
+                           *args, **kwargs):
+        """Registers a blueprint to the app, with a specified filter.
+        If result is given, returns that, otherwise, 403"""
+        if filter:
+            @blueprint.before_request
+            def before_blueprint():
+                if not self.current_user.is_authenticated() \
+                        or not filter(self.current_user):
+                    return result or self.abort(403)
+        self._app.register_blueprint(blueprint, *args, **kwargs)

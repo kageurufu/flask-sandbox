@@ -1,0 +1,7 @@
+flask
+flask-login
+unittest2
+coverage
+pyflakes
+yanc
+pep8
